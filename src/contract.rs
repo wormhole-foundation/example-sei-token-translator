@@ -43,21 +43,21 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: Empty) -> Result<Response, anyhow
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response, anyhow::Error> {
+) -> Result<Response<SeiMsg>, anyhow::Error> {
     match msg {
         ExecuteMsg::CompleteTransferAndConvert { vaa } => {
             complete_transfer_and_convert(deps, info, vaa)
         }
-        ExecuteMsg::ConvertAndTransfer { coins } => convert_and_transfer(coins),
+        ExecuteMsg::ConvertAndTransfer { coins } => convert_and_transfer(deps, info, coins),
         ExecuteMsg::ConvertBankToCw20 { coins } => convert_bank_to_cw20(coins),
         ExecuteMsg::Receive(Cw20ReceiveMsg {
             sender,
             amount,
             msg,
-        }) => handle_receiver_msg(deps, info, sender, amount, msg),
+        }) => handle_receiver_msg(deps, info, env, sender, amount, msg),
     }
 }
 
@@ -109,33 +109,7 @@ fn handle_complete_transfer_reply(
         .parse::<u128>()
         .context("could not parse amount string to u128, we should never get here")?;
 
-    // TODO: increment the number of newly minted cw20 tokens that we have -- do we need to do this??
-
-    let response: Response<SeiMsg> = Response::new();
-
-    // check CW_DENOMS to see if the denom exists
-    // add call into token factory create denom if it doesn't exist
-    if !CW_DENOMS.has(deps.storage, contract_addr) {
-        response.add_message(SeiMsg::CreateDenom {
-            subdenom: contract_addr,
-        });
-    }
-
-    // format the amount using the proper token factory denom
-    let tokenfactory_denom = "factory/".to_string()
-        + env.contract.address.to_string().as_ref()
-        + "/"
-        + contract_addr.as_ref();
-    let amount = coin(amount, tokenfactory_denom);
-
-    // add calls to mint and send bank tokens
-    response.add_message(SeiMsg::MintTokens { amount });
-    response.add_message(BankMsg::Send {
-        to_address: recipient,
-        amount: vec![amount],
-    });
-
-    Ok(response)
+    return convert_cw20_to_bank(deps, env, recipient, amount, contract_addr);
 }
 
 /// Calls into the wormhole token bridge to complete the payload3 transfer.
@@ -143,7 +117,7 @@ fn complete_transfer_and_convert(
     deps: DepsMut,
     info: MessageInfo,
     vaa: Binary,
-) -> Result<Response, anyhow::Error> {
+) -> Result<Response<SeiMsg>, anyhow::Error> {
     // get the token bridge contract address from storage
     let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
         .load(deps.storage)
@@ -188,14 +162,19 @@ fn complete_transfer_and_convert(
         ))
 }
 
-fn convert_and_transfer(coins: Coin) -> Result<Response, anyhow::Error> {
-    // receive bank token -- how to do this??
+fn convert_and_transfer(
+    deps: DepsMut,
+    info: MessageInfo,
+    coins: Coin,
+) -> Result<Response<SeiMsg>, anyhow::Error> {
+    // receive bank token, should be in info.funds
+    // info.funds should only have a single coin
     // check contract storage to see if this denom has corresponding locked cw20 tokens and valid amount of these tokens
     // call into seimsg::burn for the bank tokens
     // unlock cw20 tokens, send to the token bridge from this contract -- do we need approval to do this?? Can batch these together if necessary.
 }
 
-fn convert_bank_to_cw20(coins: Coin) -> Result<Response, anyhow::Error> {
+fn convert_bank_to_cw20(coins: Coin) -> Result<Response<SeiMsg>, anyhow::Error> {
     // receive bank token -- how to do this??
     // check contract storage to see if this denom has corresponding locked cw20 tokens and valid amount of these tokens
     // call into seimsg::burn for the bank tokens
@@ -205,35 +184,56 @@ fn convert_bank_to_cw20(coins: Coin) -> Result<Response, anyhow::Error> {
 fn handle_receiver_msg(
     deps: DepsMut,
     info: MessageInfo,
+    env: Env,
     sender: String,
     amount: Uint128,
     msg: Binary,
-) -> Result<Response, anyhow::Error> {
+) -> Result<Response<SeiMsg>, anyhow::Error> {
     // deserialize msg and match cases:
     // (1) ConvertToBank -- call into convert_cw20_to_bank
     let receive_action: ReceiveAction =
         serde_json::from_slice(msg.as_slice()).context("could not parse receive action payload")?;
     match receive_action {
-        ReceiveAction::ConvertToBank => convert_cw20_to_bank(deps, info, sender, amount),
+        ReceiveAction::ConvertToBank => {
+            convert_cw20_to_bank(deps, env, sender, amount.u128(), info.sender.into_string())
+        }
     }
 }
 
 fn convert_cw20_to_bank(
     deps: DepsMut,
-    info: MessageInfo,
-    sender: String,
-    amount: Uint128,
-) -> Result<Response, anyhow::Error> {
+    env: Env,
+    recipient: String,
+    amount: u128,
+    contract_addr: String,
+) -> Result<Response<SeiMsg>, anyhow::Error> {
+    // TODO: increment the number of newly minted cw20 tokens that we have -- do we need to do this??
+
+    let response: Response<SeiMsg> = Response::new();
+
     // check contract storage see if we've created a denom for this cw20 token yet
     // if we haven't created the denom, then create the denom
     // info.sender contains the cw20 contract address
-    let has_created_denom = CW_DENOMS
-        .load(&deps.storage, info.sender.to_string())
-        .is_ok();
-    if !has_created_denom {
+    if !CW_DENOMS.has(deps.storage, contract_addr) {
         // call into token factory to create the denom
+        response.add_message(SeiMsg::CreateDenom {
+            subdenom: contract_addr,
+        });
     }
 
-    // otherwise we get the right denom for this cw20 token from contract storage.
-    // then we can lock the cw20 token and then call seimsg::mint for the amount
+    // format the amount using the proper token factory denom
+    let tokenfactory_denom = "factory/".to_string()
+        + env.contract.address.to_string().as_ref()
+        + "/"
+        + contract_addr.as_ref();
+    let amount = coin(amount, tokenfactory_denom);
+
+    // add calls to mint and send bank tokens
+    response.add_message(SeiMsg::MintTokens { amount });
+    response.add_message(BankMsg::Send {
+        to_address: recipient,
+        amount: vec![amount],
+    });
+
+    Ok(response)
 }
