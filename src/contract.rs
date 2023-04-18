@@ -3,8 +3,8 @@ use cosmwasm_std::entry_point;
 
 use anyhow::{ensure, Context};
 use cosmwasm_std::{
-    coin, to_binary, BankMsg, Binary, CosmosMsg, DepsMut, Empty, Env, MessageInfo, QueryRequest,
-    Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
+    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env, MessageInfo,
+    QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_token_bridge::msg::{
@@ -194,6 +194,11 @@ fn convert_and_transfer(
         .load(deps.storage)
         .context("could not load wormhole contract address")?;
 
+    // load the token bridge contract address
+    let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
+        .load(deps.storage)
+        .context("could not load token bridge contract address")?;
+
     // check wormhole fee token and use the token that's not the wormhole fee token
     let wormhole_query_msg = to_binary(&WormholeQueryMsg::GetState {})
         .context("could not serialize wormhole get_state query msg")?;
@@ -216,32 +221,7 @@ fn convert_and_transfer(
         .find(|c| c.denom != wormhole_info.fee.denom)
         .context("coin to bridge not included in info.funds")?;
 
-    // extract the contract address from the denom of the token that was sent to us
-    // if the token is not a factory token, return error
-    let parsed_denom = bridging_coin.denom.split("/").collect::<Vec<_>>();
-    ensure!(
-        parsed_denom.len() == 3
-            && parsed_denom[0] == "factory"
-            && parsed_denom[1] == env.contract.address.to_string(),
-        "coin is not from the token factory"
-    );
-    let cw20_contract_addr = parsed_denom[3].to_string();
-
-    // validate that the contract does indeed match the stored denom we have for it
-    let stored_denom = CW_DENOMS
-        .load(deps.storage, cw20_contract_addr.clone())
-        .context(
-            "a corresponding denom for the extracted contract addr is not contained in storage",
-        )?;
-    ensure!(
-        stored_denom == bridging_coin.denom,
-        "the stored denom for the contract does not match the bridging token denom"
-    );
-
-    // load the token bridge contract address
-    let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
-        .load(deps.storage)
-        .context("could not load token bridge contract address")?;
+    let cw20_contract_addr = parse_bank_token_factory_contract(deps, env, bridging_coin.clone())?;
 
     // batch calls together
     let mut response: Response<SeiMsg> = Response::new();
@@ -299,28 +279,7 @@ fn convert_bank_to_cw20(
     );
 
     let converting_coin = info.funds[0].clone();
-
-    // extract the contract address from the denom of the token that was sent to us
-    // if the token is not a factory token created by this contract, return error
-    let parsed_denom = converting_coin.denom.split("/").collect::<Vec<_>>();
-    ensure!(
-        parsed_denom.len() == 3
-            && parsed_denom[0] == "factory"
-            && parsed_denom[1] == env.contract.address.to_string(),
-        "coin is not from the token factory"
-    );
-    let cw20_contract_addr = parsed_denom[3].to_string();
-
-    // validate that the contract does indeed match the stored denom we have for it
-    let stored_denom = CW_DENOMS
-        .load(deps.storage, cw20_contract_addr.clone())
-        .context(
-            "a corresponding denom for the extracted contract addr is not contained in storage",
-        )?;
-    ensure!(
-        stored_denom == converting_coin.denom,
-        "the stored denom for the contract does not match the actual coin denom"
-    );
+    let cw20_contract_addr = parse_bank_token_factory_contract(deps, env, converting_coin.clone())?;
 
     // batch calls together
     let mut response: Response<SeiMsg> = Response::new();
@@ -343,6 +302,36 @@ fn convert_bank_to_cw20(
     }));
 
     Ok(response)
+}
+
+fn parse_bank_token_factory_contract(
+    deps: DepsMut,
+    env: Env,
+    coin: Coin,
+) -> Result<String, anyhow::Error> {
+    // extract the contract address from the denom of the token that was sent to us
+    // if the token is not a factory token created by this contract, return error
+    let parsed_denom = coin.denom.split("/").collect::<Vec<_>>();
+    ensure!(
+        parsed_denom.len() == 3
+            && parsed_denom[0] == "factory"
+            && parsed_denom[1] == env.contract.address.to_string(),
+        "coin is not from the token factory"
+    );
+    let cw20_contract_addr = parsed_denom[3].to_string();
+
+    // validate that the contract does indeed match the stored denom we have for it
+    let stored_denom = CW_DENOMS
+        .load(deps.storage, cw20_contract_addr.clone())
+        .context(
+            "a corresponding denom for the extracted contract addr is not contained in storage",
+        )?;
+    ensure!(
+        stored_denom == coin.denom,
+        "the stored denom for the contract does not match the actual coin denom"
+    );
+
+    Ok(cw20_contract_addr)
 }
 
 fn handle_receiver_msg(
