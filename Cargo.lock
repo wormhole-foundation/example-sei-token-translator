@@ -398,9 +398,10 @@ dependencies = [
  "sei-cosmwasm",
  "serde",
  "serde_json",
+ "terraswap",
  "thiserror",
- "token-bridge-terra-2",
- "wormhole-bridge-terra-2",
+ "token-bridge-cosmwasm",
+ "wormhole-cosmwasm",
 ]
 
 [[package]]
@@ -848,9 +849,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "token-bridge-terra-2"
+name = "token-bridge-cosmwasm"
 version = "0.1.0"
-source = "git+https://github.com/wormhole-foundation/wormhole#8837a9af5061109fcb1c7e05de3102f36d873128"
+source = "git+https://github.com/wormhole-foundation/wormhole#d7b6be7358a3401394a3a2dc8dff84df15dfe854"
 dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
@@ -863,7 +864,7 @@ dependencies = [
  "sha3",
  "terraswap",
  "thiserror",
- "wormhole-bridge-terra-2",
+ "wormhole-cosmwasm",
 ]
 
 [[package]]
@@ -903,9 +904,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
-name = "wormhole-bridge-terra-2"
+name = "wormhole-cosmwasm"
 version = "0.1.0"
-source = "git+https://github.com/wormhole-foundation/wormhole#8837a9af5061109fcb1c7e05de3102f36d873128"
+source = "git+https://github.com/wormhole-foundation/wormhole#d7b6be7358a3401394a3a2dc8dff84df15dfe854"
 dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",

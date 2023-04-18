@@ -3,7 +3,7 @@
 // 3. convertToBank(cw20Tokens)
 // 4. convertToCW20(bankTokens)
 
-use cosmwasm_std::{Binary, Coin};
+use cosmwasm_std::{Binary, Uint128};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub struct InstantiateMsg {
     pub token_bridge_contract: String,
+    pub wormhole_contract: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -36,7 +37,11 @@ pub enum ExecuteMsg {
     /// 2. Burn the bank tokens using the token factory.
     /// 3. Unlock the equivalent cw20 tokens.
     /// 4. Cross-call into the wormhole token bridge to initiate a cross-chain transfer.
-    ConvertAndTransfer { coins: Coin },
+    ConvertAndTransfer {
+        recipient_chain: u16,
+        recipient: Binary,
+        fee: Uint128,
+    },
 
     /// Convert bank tokens into cw20 tokens using the token factory.
     /// This function will:
@@ -44,7 +49,7 @@ pub enum ExecuteMsg {
     /// 2. Burn the bank tokens using the token factory.
     /// 3. Unlock the equivalent cw20 tokens.
     /// 4. Send the unlocked cw20 tokens back to the caller.
-    ConvertBankToCw20 { coins: Coin },
+    ConvertBankToCw20,
 
     /// Implements the CW20 receiver interface to recieve cw20 tokens and act on them.
     /// Cw20ReceiveMsg.msg will be deserialized into the ReceiveAction type.

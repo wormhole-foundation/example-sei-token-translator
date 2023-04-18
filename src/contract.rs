@@ -3,18 +3,23 @@ use cosmwasm_std::entry_point;
 
 use anyhow::{ensure, Context};
 use cosmwasm_std::{
-    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env, MessageInfo,
-    QueryRequest, Reply, Response, SubMsg, Uint128, WasmQuery,
+    coin, to_binary, BankMsg, Binary, CosmosMsg, DepsMut, Empty, Env, MessageInfo, QueryRequest,
+    Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw20::Cw20ReceiveMsg;
-use sei_cosmwasm::SeiMsg;
-use token_bridge_terra_2::msg::{
+use cw_token_bridge::msg::{
     ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg, TransferInfoResponse,
 };
+use sei_cosmwasm::SeiMsg;
+
+use cw_wormhole::msg::{GetStateResponse, QueryMsg as WormholeQueryMsg};
+
+use cw20_wrapped_2::msg::ExecuteMsg as Cw20WrappedExecuteMsg;
+use terraswap::asset::{Asset, AssetInfo};
 
 use crate::{
     msg::{ExecuteMsg, InstantiateMsg, ReceiveAction},
-    state::{CW_DENOMS, TOKEN_BRIDGE_CONTRACT},
+    state::{CW_DENOMS, TOKEN_BRIDGE_CONTRACT, WORMHOLE_CONTRACT},
 };
 
 const COMPLETE_TRANSFER_REPLY_ID: u64 = 1;
@@ -28,7 +33,11 @@ pub fn instantiate(
 ) -> Result<Response, anyhow::Error> {
     TOKEN_BRIDGE_CONTRACT
         .save(deps.storage, &msg.token_bridge_contract)
-        .context("failed to save token_bridge_contract to storage")?;
+        .context("failed to save token bridge contract address to storage")?;
+
+    WORMHOLE_CONTRACT
+        .save(deps.storage, &msg.wormhole_contract)
+        .context("failed to save wormhole contract address to storage")?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -51,8 +60,12 @@ pub fn execute(
         ExecuteMsg::CompleteTransferAndConvert { vaa } => {
             complete_transfer_and_convert(deps, info, vaa)
         }
-        ExecuteMsg::ConvertAndTransfer { coins } => convert_and_transfer(deps, info, coins),
-        ExecuteMsg::ConvertBankToCw20 { coins } => convert_bank_to_cw20(coins),
+        ExecuteMsg::ConvertAndTransfer {
+            recipient_chain,
+            recipient,
+            fee,
+        } => convert_and_transfer(deps, info, env, recipient_chain, recipient, fee),
+        ExecuteMsg::ConvertBankToCw20 => convert_bank_to_cw20(deps, info),
         ExecuteMsg::Receive(Cw20ReceiveMsg {
             sender,
             amount,
@@ -93,7 +106,7 @@ fn handle_complete_transfer_reply(
         res.events.iter().find(|e| e.ty == "wasm").context(
             "wasm event not included in token bridge response, we should never get here",
         )?;
-    let wasm_event_iter = wasm_event.attributes.iter();
+    let mut wasm_event_iter = wasm_event.attributes.iter();
     let contract_addr = wasm_event_iter
         .find(|a| a.key == "contract")
         .map(|a| a.value)
@@ -121,7 +134,7 @@ fn complete_transfer_and_convert(
     // get the token bridge contract address from storage
     let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
         .load(deps.storage)
-        .context("could not load token_bridge_contract")?;
+        .context("could not load token bridge contract address")?;
 
     // craft the token bridge execute message
     // this will be added as a submessage to the response
@@ -132,7 +145,7 @@ fn complete_transfer_and_convert(
     .context("could not serialize token bridge execute msg")?;
 
     let sub_msg = SubMsg::reply_on_success(
-        CosmosMsg::Wasm(cosmwasm_std::WasmMsg::Execute {
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: token_bridge_contract,
             msg: token_bridge_execute_msg,
             funds: vec![],
@@ -165,16 +178,117 @@ fn complete_transfer_and_convert(
 fn convert_and_transfer(
     deps: DepsMut,
     info: MessageInfo,
-    coins: Coin,
+    env: Env,
+    recipient_chain: u16,
+    recipient: Binary,
+    fee: Uint128,
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
-    // receive bank token, should be in info.funds
-    // info.funds should only have a single coin
-    // check contract storage to see if this denom has corresponding locked cw20 tokens and valid amount of these tokens
-    // call into seimsg::burn for the bank tokens
-    // unlock cw20 tokens, send to the token bridge from this contract -- do we need approval to do this?? Can batch these together if necessary.
+    // bank tokens sent to the contract will be in info.funds
+    ensure!(
+        info.funds.len() == 2,
+        "info.funds should contain 2 coins: 1 for bridging and another for the wormhole fee"
+    );
+
+    // get the wormhole contract address from storage
+    let wormhole_contract = WORMHOLE_CONTRACT
+        .load(deps.storage)
+        .context("could not load wormhole contract address")?;
+
+    // check wormhole fee token and use the token that's not the wormhole fee token
+    let wormhole_query_msg = to_binary(&WormholeQueryMsg::GetState {})
+        .context("could not serialize wormhole get_state query msg")?;
+    let wormhole_info: GetStateResponse = deps
+        .querier
+        .query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: wormhole_contract,
+            msg: wormhole_query_msg,
+        }))
+        .context("could not query wormhole state")?;
+
+    let wormhole_fee_coin = info
+        .funds
+        .iter()
+        .find(|c| c.denom == wormhole_info.fee.denom)
+        .context("wormhole fee token not included in info.funds")?;
+    let bridging_coin = info
+        .funds
+        .iter()
+        .find(|c| c.denom != wormhole_info.fee.denom)
+        .context("coin to bridge not included in info.funds")?;
+
+    // extract the contract address from the denom of the token that was sent to us
+    // if the token is not a factory token, return error
+    let parsed_denom = bridging_coin.denom.split("/").collect::<Vec<_>>();
+    ensure!(
+        parsed_denom.len() == 3
+            && parsed_denom[0] == "factory"
+            && parsed_denom[1] == env.contract.address.to_string(),
+        "coin is not from the token factory"
+    );
+    let cw20_contract_addr = parsed_denom[3].to_string();
+
+    // validate that the contract does indeed match the stored denom we have for it
+    let stored_denom = CW_DENOMS.load(deps.storage, cw20_contract_addr).context(
+        "a corresponding denom for the extracted contract addr is not contained in storage",
+    )?;
+    ensure!(
+        stored_denom == bridging_coin.denom,
+        "the stored denom for the contract does not match the bridging token denom"
+    );
+
+    // load the token bridge contract address
+    let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
+        .load(deps.storage)
+        .context("could not load token bridge contract address")?;
+
+    // batch calls together
+    let response: Response<SeiMsg> = Response::new();
+
+    // 1. seimsg::burn for the bank tokens
+    response.add_message(SeiMsg::BurnTokens {
+        amount: *bridging_coin,
+    });
+
+    // 2. cw20::increaseAllowance to the contract address for the token bridge to spend the amount of tokens
+    let increase_allowance_msg = to_binary(&Cw20WrappedExecuteMsg::IncreaseAllowance {
+        spender: token_bridge_contract,
+        amount: bridging_coin.amount,
+        expires: None,
+    })
+    .context("could not serialize cw20 increase_allowance msg")?;
+    response.add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cw20_contract_addr,
+        msg: increase_allowance_msg,
+        funds: vec![],
+    }));
+
+    // 3. token_bridge::initiate_transfer -- the cw20 tokens will be either burned or transferred to the token_bridge
+    let initiate_transfer_msg = to_binary(&TokenBridgeExecuteMsg::InitiateTransfer {
+        asset: Asset {
+            info: AssetInfo::Token {
+                contract_addr: cw20_contract_addr,
+            },
+            amount: bridging_coin.amount,
+        },
+        recipient_chain,
+        recipient,
+        fee,
+        nonce: 0,
+    })
+    .context("could not serialize token bridge initiate_transfer msg")?;
+    response.add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: token_bridge_contract,
+        msg: initiate_transfer_msg,
+        funds: vec![*wormhole_fee_coin],
+    }));
+
+    Ok(response)
 }
 
-fn convert_bank_to_cw20(coins: Coin) -> Result<Response<SeiMsg>, anyhow::Error> {
+fn convert_bank_to_cw20(
+    deps: DepsMut,
+    info: MessageInfo,
+) -> Result<Response<SeiMsg>, anyhow::Error> {
     // receive bank token -- how to do this??
     // check contract storage to see if this denom has corresponding locked cw20 tokens and valid amount of these tokens
     // call into seimsg::burn for the bank tokens
