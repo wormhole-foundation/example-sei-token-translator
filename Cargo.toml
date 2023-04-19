@@ -8,10 +8,10 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [profile.release]
-opt-level = 3
-debug = false
+opt-level = 0
+debug = true
 rpath = false
-lto = true
+lto = false
 debug-assertions = false
 codegen-units = 1
 panic = 'abort'
@@ -38,10 +38,7 @@ cw-storage-plus = "0.13.2"
 cw20 = "0.13.2"
 cosmwasm-schema = "1"
 anyhow = "1"
-schemars = "0.8.8"
-serde = { version = "1.0.137", default-features = false, features = ["derive"] }
-serde_json = "1"
-thiserror = "1.0.31"
+serde-json-wasm = "0.4"
 terraswap = "2.8.0"
 
 cw20-wrapped-2 = { version = "0.1.0", features = ["library"] }

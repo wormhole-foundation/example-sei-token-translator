@@ -146,7 +146,7 @@ dependencies = [
  "hex",
  "schemars",
  "serde",
- "serde-json-wasm",
+ "serde-json-wasm 0.5.1",
  "sha2 0.10.6",
  "thiserror",
  "uint",
@@ -394,12 +394,9 @@ dependencies = [
  "cw-storage-plus",
  "cw20",
  "cw20-wrapped-2",
- "schemars",
  "sei-cosmwasm",
- "serde",
- "serde_json",
+ "serde-json-wasm 0.4.1",
  "terraswap",
- "thiserror",
  "token-bridge-cosmwasm",
  "wormhole-cosmwasm",
 ]
@@ -669,6 +666,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb2f3770c8bce3bcda7e149193a069a0f4365bda1fa5cd88e03bca26afc1216c"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-json-wasm"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479b4dbc401ca13ee8ce902851b834893251404c4f3c65370a49e047a6be09a5"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

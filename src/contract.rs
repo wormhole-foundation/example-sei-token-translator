@@ -344,8 +344,8 @@ fn handle_receiver_msg(
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
     // deserialize msg and match cases:
     // (1) ConvertToBank -- call into convert_cw20_to_bank
-    let receive_action: ReceiveAction =
-        serde_json::from_slice(msg.as_slice()).context("could not parse receive action payload")?;
+    let receive_action: ReceiveAction = serde_json_wasm::from_slice(msg.as_slice())
+        .context("could not parse receive action payload")?;
     match receive_action {
         ReceiveAction::ConvertToBank => {
             convert_cw20_to_bank(deps, env, sender, amount.u128(), info.sender.into_string())
