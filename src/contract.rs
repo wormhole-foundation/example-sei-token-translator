@@ -8,7 +8,8 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_token_bridge::msg::{
-    ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg, TransferInfoResponse,
+    CompleteTransferResponse, ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg,
+    TransferInfoResponse,
 };
 use sei_cosmwasm::SeiMsg;
 
@@ -99,30 +100,22 @@ fn handle_complete_transfer_reply(
     );
 
     let res = msg.result.unwrap();
+    let res_data_raw = res
+        .data
+        .context("no data in response, we should never get here")?;
+    let res_data: CompleteTransferResponse = serde_json_wasm::from_slice(res_data_raw.as_slice())
+        .context("failed to deserialize response data")?;
+    let contract_addr = res_data
+        .contract
+        .context("no contract in response, we should never get here")?;
 
-    // find the wasm event and get the attributes
-    // we need the contract address, recipient, and amount
-    let wasm_event =
-        res.events.iter().find(|e| e.ty == "wasm").context(
-            "wasm event not included in token bridge response, we should never get here",
-        )?;
-    let mut wasm_event_iter = wasm_event.attributes.iter();
-    let contract_addr = wasm_event_iter
-        .find(|a| a.key == "contract")
-        .map(|a| a.value.clone())
-        .context("contract attribute not found in wasm event, we should never get here")?;
-    let recipient = wasm_event_iter
-        .find(|a| a.key == "recipient")
-        .map(|a| a.value.clone())
-        .context("recipient attribute not found in wasm event, we should never get here")?;
-    let amount = wasm_event_iter
-        .find(|a| a.key == "amount")
-        .map(|a| a.value.clone())
-        .context("amount attribute not found in wasm event, we should never get here")?
-        .parse::<u128>()
-        .context("could not parse amount string to u128, we should never get here")?;
-
-    return convert_cw20_to_bank(deps, env, recipient, amount, contract_addr);
+    return convert_cw20_to_bank(
+        deps,
+        env,
+        res_data.recipient,
+        res_data.amount.into(),
+        contract_addr,
+    );
 }
 
 /// Calls into the wormhole token bridge to complete the payload3 transfer.
