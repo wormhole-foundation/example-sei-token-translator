@@ -353,7 +353,8 @@ fn convert_cw20_to_bank(
     amount: u128,
     contract_addr: String,
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
-    // TODO: increment the number of newly minted cw20 tokens that we have -- do we need to do this??
+    // check the contract address is valid
+    deps.api.addr_validate(&contract_addr).context("invalid contract address")?;
 
     let mut response: Response<SeiMsg> = Response::new();
 
