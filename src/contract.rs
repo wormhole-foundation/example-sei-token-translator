@@ -3,8 +3,8 @@ use cosmwasm_std::entry_point;
 
 use anyhow::{ensure, Context};
 use cosmwasm_std::{
-    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env, MessageInfo,
-    QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
+    coin, from_binary, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env,
+    MessageInfo, QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_token_bridge::msg::{
@@ -103,8 +103,8 @@ fn handle_complete_transfer_reply(
     let res_data_raw = res
         .data
         .context("no data in response, we should never get here")?;
-    let res_data: CompleteTransferResponse = serde_json_wasm::from_slice(res_data_raw.as_slice())
-        .context("failed to deserialize response data")?;
+    let res_data: CompleteTransferResponse =
+        from_binary(&res_data_raw).context("failed to deserialize response data")?;
     let contract_addr = res_data
         .contract
         .context("no contract in response, we should never get here")?;
