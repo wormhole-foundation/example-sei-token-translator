@@ -3,13 +3,12 @@ use cosmwasm_std::entry_point;
 
 use anyhow::{ensure, Context};
 use cosmwasm_std::{
-    coin, from_binary, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env,
-    MessageInfo, QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
+    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env, MessageInfo,
+    QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_token_bridge::msg::{
-    CompleteTransferResponse, ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg,
-    TransferInfoResponse,
+    ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg, TransferInfoResponse,
 };
 use sei_cosmwasm::SeiMsg;
 
@@ -100,14 +99,24 @@ fn handle_complete_transfer_reply(
     );
 
     let res = msg.result.unwrap();
-    let res_data_raw = res
-        .data
-        .context("no data in response, we should never get here")?;
-    let res_data: CompleteTransferResponse =
-        from_binary(&res_data_raw).context("failed to deserialize response data")?;
-    let contract_addr = res_data
-        .contract
-        .context("no contract in response, we should never get here")?;
+
+    // find the wasm event and get the attributes
+    // we need the contract address, recipient, and amount
+    let wasm_event =
+        res.events.iter().find(|e| e.ty == "wasm").context(
+            "wasm event not included in token bridge response, we should never get here",
+        )?;
+    let mut wasm_event_iter = wasm_event.attributes.iter();
+    let contract_addr = wasm_event_iter
+        .find(|a| a.key == "contract")
+        .map(|a| a.value.clone())
+        .context("contract attribute not found in wasm event, we should never get here")?;
+    let amount = wasm_event_iter
+        .find(|a| a.key == "amount")
+        .map(|a| a.value.clone())
+        .context("amount attribute not found in wasm event, we should never get here")?
+        .parse::<u128>()
+        .context("could not parse amount string to u128, we should never get here")?;
 
     // load interim state
     let transfer_info = CURRENT_TRANSFER
@@ -121,13 +130,13 @@ fn handle_complete_transfer_reply(
     let payload: BridgingPayload = serde_json_wasm::from_slice(&transfer_info.payload)
         .context("failed to deserialize transfer payload")?;
     match payload {
-        BridgingPayload::BasicRecipient { recipient } => convert_cw20_to_bank(
-            deps,
-            env,
-            recipient.to_string(),
-            res_data.amount.into(),
-            contract_addr,
-        ),
+        BridgingPayload::BasicRecipient { recipient } => {
+            let recipient_decoded = String::from_utf8(recipient.to_vec()).context(format!(
+                "failed to convert {} to utf8 string",
+                recipient.to_string()
+            ))?;
+            convert_cw20_to_bank(deps, env, recipient_decoded, amount, contract_addr)
+        }
     }
 }
 
@@ -374,11 +383,11 @@ fn convert_cw20_to_bank(
     // check the recipient and contract addresses are valid
     deps.api
         .addr_validate(&recipient)
-        .context("invalid recipient address")?;
+        .context(format!("invalid recipient address {}", recipient))?;
 
     deps.api
         .addr_validate(&contract_addr)
-        .context("invalid contract address")?;
+        .context(format!("invalid contract address {}", contract_addr))?;
 
     let mut response: Response<SeiMsg> = Response::new();
 
