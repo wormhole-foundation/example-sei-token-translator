@@ -62,3 +62,10 @@ pub enum ReceiveAction {
     /// 3. Send the minted bank tokens back to the caller.
     ConvertToBank,
 }
+
+#[cw_serde]
+pub enum BridgingPayload {
+    BasicRecipient {
+        recipient: Binary,
+    }
+}
