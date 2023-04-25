@@ -19,8 +19,8 @@ use cw20_wrapped_2::msg::ExecuteMsg as Cw20WrappedExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
 
 use crate::{
-    msg::{ExecuteMsg, InstantiateMsg, ReceiveAction},
-    state::{CW_DENOMS, TOKEN_BRIDGE_CONTRACT, WORMHOLE_CONTRACT},
+    msg::{BridgingPayload, ExecuteMsg, InstantiateMsg, ReceiveAction},
+    state::{CURRENT_TRANSFER, CW_DENOMS, TOKEN_BRIDGE_CONTRACT, WORMHOLE_CONTRACT},
 };
 
 const COMPLETE_TRANSFER_REPLY_ID: u64 = 1;
@@ -109,13 +109,26 @@ fn handle_complete_transfer_reply(
         .contract
         .context("no contract in response, we should never get here")?;
 
-    return convert_cw20_to_bank(
-        deps,
-        env,
-        res_data.recipient,
-        res_data.amount.into(),
-        contract_addr,
-    );
+    // load interim state
+    let transfer_info = CURRENT_TRANSFER
+        .load(deps.storage)
+        .context("failed to load current transfer from storage")?;
+
+    // delete interim state
+    CURRENT_TRANSFER.remove(deps.storage);
+
+    // deserialize payload into the type we expect
+    let payload: BridgingPayload = serde_json_wasm::from_slice(&transfer_info.payload)
+        .context("failed to deserialize transfer payload")?;
+    match payload {
+        BridgingPayload::BasicRecipient { recipient } => convert_cw20_to_bank(
+            deps,
+            env,
+            recipient.to_string(),
+            res_data.amount.into(),
+            contract_addr,
+        ),
+    }
 }
 
 /// Calls into the wormhole token bridge to complete the payload3 transfer.
@@ -157,6 +170,11 @@ fn complete_transfer_and_convert(
             msg: token_bridge_query_msg,
         }))
         .context("could not parse token bridge payload3 vaa")?;
+
+    // save interim state
+    CURRENT_TRANSFER
+        .save(deps.storage, &transfer_info)
+        .context("failed to save current transfer to storage")?;
 
     // return the response which will callback to the reply handler on success
     Ok(Response::new()
@@ -353,8 +371,14 @@ fn convert_cw20_to_bank(
     amount: u128,
     contract_addr: String,
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
-    // check the contract address is valid
-    deps.api.addr_validate(&contract_addr).context("invalid contract address")?;
+    // check the recipient and contract addresses are valid
+    deps.api
+        .addr_validate(&recipient)
+        .context("invalid recipient address")?;
+
+    deps.api
+        .addr_validate(&contract_addr)
+        .context("invalid contract address")?;
 
     let mut response: Response<SeiMsg> = Response::new();
 
