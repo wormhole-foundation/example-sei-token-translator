@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use anyhow::{ensure, Context};
 use cosmwasm_std::{
-    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, DepsMut, Empty, Env, MessageInfo,
+    coin, to_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo,
     QueryRequest, Reply, Response, SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
@@ -338,7 +338,9 @@ fn parse_bank_token_factory_contract(
             && parsed_denom[1] == env.contract.address.to_string(),
         "coin is not from the token factory"
     );
-    let cw20_contract_addr = parsed_denom[3].to_string();
+
+    // decode subdenom from base64 => encode as cosmos addr to get contract addr
+    let cw20_contract_addr = contract_addr_from_base58(deps.as_ref(), parsed_denom[2])?;
 
     // validate that the contract does indeed match the stored denom we have for it
     let stored_denom = CW_DENOMS
@@ -389,6 +391,14 @@ fn convert_cw20_to_bank(
         .addr_validate(&contract_addr)
         .context(format!("invalid contract address {}", contract_addr))?;
 
+    // convert contract address into base64
+    let subdenom = contract_addr_to_base58(deps.as_ref(), contract_addr.clone())?;
+    // format the token factory denom
+    let tokenfactory_denom = "factory/".to_string()
+        + env.contract.address.to_string().as_ref()
+        + "/"
+        + subdenom.as_ref();
+
     let mut response: Response<SeiMsg> = Response::new();
 
     // check contract storage see if we've created a denom for this cw20 token yet
@@ -397,15 +407,16 @@ fn convert_cw20_to_bank(
     if !CW_DENOMS.has(deps.storage, contract_addr.clone()) {
         // call into token factory to create the denom
         response = response.add_message(SeiMsg::CreateDenom {
-            subdenom: contract_addr.clone(),
+            subdenom: subdenom.clone(),
         });
+
+        // add the contract_addr => tokenfactory denom to storage
+        CW_DENOMS
+            .save(deps.storage, contract_addr, &tokenfactory_denom)
+            .context("failed to save contract_addr => tokenfactory denom to storage")?;
     }
 
-    // format the amount using the proper token factory denom
-    let tokenfactory_denom = "factory/".to_string()
-        + env.contract.address.to_string().as_ref()
-        + "/"
-        + contract_addr.as_ref();
+    // amount of tokenfactory coins to mint + send
     let amount = coin(amount, tokenfactory_denom);
 
     // add calls to mint and send bank tokens
@@ -418,4 +429,25 @@ fn convert_cw20_to_bank(
     });
 
     Ok(response)
+}
+
+fn contract_addr_to_base58(deps: Deps, contract_addr: String) -> Result<String, anyhow::Error> {
+    // convert the contract address into bytes
+    let contract_addr_bytes = deps.api.addr_canonicalize(&contract_addr).context(format!(
+        "could not canonicalize contract address {}",
+        contract_addr
+    ))?;
+    let base_58_addr = bs58::encode(contract_addr_bytes.as_slice()).into_string();
+    Ok(base_58_addr)
+}
+
+fn contract_addr_from_base58(deps: Deps, subdenom: &str) -> Result<String, anyhow::Error> {
+    let decoded_addr = bs58::decode(subdenom)
+        .into_vec()
+        .context(format!("failed to decode base58 subdenom {}", subdenom))?;
+    let canonical_addr = Binary::from(decoded_addr);
+    deps.api
+        .addr_humanize(&canonical_addr.into())
+        .map(|a| a.to_string())
+        .context(format!("failed to humanize cosmos address {}", subdenom))
 }
