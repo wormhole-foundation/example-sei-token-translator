@@ -65,7 +65,5 @@ pub enum ReceiveAction {
 
 #[cw_serde]
 pub enum BridgingPayload {
-    BasicRecipient {
-        recipient: Binary,
-    }
+    BasicRecipient { recipient: Binary },
 }
