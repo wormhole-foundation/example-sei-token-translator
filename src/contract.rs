@@ -65,7 +65,7 @@ pub fn execute(
             recipient,
             fee,
         } => convert_and_transfer(deps, info, env, recipient_chain, recipient, fee),
-        ExecuteMsg::ConvertBankToCw20 => convert_bank_to_cw20(deps, info, env),
+        ExecuteMsg::ConvertBankToCw20 {} => convert_bank_to_cw20(deps, info, env),
         ExecuteMsg::Receive(Cw20ReceiveMsg {
             sender,
             amount,
@@ -369,7 +369,7 @@ fn handle_receiver_msg(
     let receive_action: ReceiveAction = serde_json_wasm::from_slice(msg.as_slice())
         .context("could not parse receive action payload")?;
     match receive_action {
-        ReceiveAction::ConvertToBank => {
+        ReceiveAction::ConvertToBank {} => {
             convert_cw20_to_bank(deps, env, sender, amount.u128(), info.sender.into_string())
         }
     }

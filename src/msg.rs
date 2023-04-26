@@ -46,7 +46,7 @@ pub enum ExecuteMsg {
     /// 2. Burn the bank tokens using the token factory.
     /// 3. Unlock the equivalent cw20 tokens.
     /// 4. Send the unlocked cw20 tokens back to the caller.
-    ConvertBankToCw20,
+    ConvertBankToCw20 {},
 
     /// Implements the CW20 receiver interface to recieve cw20 tokens and act on them.
     /// Cw20ReceiveMsg.msg will be deserialized into the ReceiveAction type.
@@ -60,7 +60,7 @@ pub enum ReceiveAction {
     /// 1. Lock the cw20 tokens.
     /// 2. Mint an equivalent amount of bank tokens using the token factory.
     /// 3. Send the minted bank tokens back to the caller.
-    ConvertToBank,
+    ConvertToBank {},
 }
 
 #[cw_serde]
