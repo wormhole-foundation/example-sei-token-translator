@@ -13,8 +13,6 @@ use cw_token_bridge::msg::{
 };
 use sei_cosmwasm::SeiMsg;
 
-use cw_wormhole::msg::{GetStateResponse, QueryMsg as WormholeQueryMsg};
-
 use cw20_wrapped_2::msg::ExecuteMsg as Cw20WrappedExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
 
@@ -200,44 +198,13 @@ fn convert_and_transfer(
     recipient: Binary,
     fee: Uint128,
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
-    // bank tokens sent to the contract will be in info.funds
-    ensure!(
-        info.funds.len() == 2,
-        "info.funds should contain 2 coins: 1 for bridging and another for the wormhole fee"
-    );
-
-    // get the wormhole contract address from storage
-    let wormhole_contract = WORMHOLE_CONTRACT
-        .load(deps.storage)
-        .context("could not load wormhole contract address")?;
-
     // load the token bridge contract address
     let token_bridge_contract = TOKEN_BRIDGE_CONTRACT
         .load(deps.storage)
         .context("could not load token bridge contract address")?;
 
-    // check wormhole fee token and use the token that's not the wormhole fee token
-    let wormhole_query_msg = to_binary(&WormholeQueryMsg::GetState {})
-        .context("could not serialize wormhole get_state query msg")?;
-    let wormhole_info: GetStateResponse = deps
-        .querier
-        .query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: wormhole_contract,
-            msg: wormhole_query_msg,
-        }))
-        .context("could not query wormhole state")?;
-
-    let wormhole_fee_coin = info
-        .funds
-        .iter()
-        .find(|c| c.denom == wormhole_info.fee.denom)
-        .context("wormhole fee token not included in info.funds")?;
-    let bridging_coin = info
-        .funds
-        .iter()
-        .find(|c| c.denom != wormhole_info.fee.denom)
-        .context("coin to bridge not included in info.funds")?;
-
+    ensure!(info.funds.len() == 1, "no bridging coin included");
+    let bridging_coin = info.funds[0].clone();
     let cw20_contract_addr = parse_bank_token_factory_contract(deps, env, bridging_coin.clone())?;
 
     // batch calls together
@@ -278,7 +245,7 @@ fn convert_and_transfer(
     response = response.add_message(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: token_bridge_contract,
         msg: initiate_transfer_msg,
-        funds: vec![wormhole_fee_coin.clone()],
+        funds: vec![],
     }));
 
     Ok(response)
