@@ -15,9 +15,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.70"
+version = "1.0.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7de8ce5e0f9f8d88245311066a578d72b7af3e7088f32783804676302df237e4"
+checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
 
 [[package]]
 name = "base16ct"
@@ -94,9 +94,9 @@ checksum = "520fbf3c07483f94e3e3ca9d0cfd913d7718ef2483d2cfd91c0d9e91474ab913"
 
 [[package]]
 name = "cosmwasm-crypto"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b76d2207945b8aa3ce0735da53ab9a74f75fe3e7794754c216a9edfa04e1e627"
+checksum = "75836a10cb9654c54e77ee56da94d592923092a10b369cdb0dbd56acefc16340"
 dependencies = [
  "digest 0.10.6",
  "ed25519-zebra",
@@ -107,18 +107,18 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-derive"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dd07af7736164d2d8126dc67fdb33b1b5c54fb5a3190395c47f46d24fc6d592"
+checksum = "1c9f7f0e51bfc7295f7b2664fe8513c966428642aa765dad8a74acdab5e0c773"
 dependencies = [
  "syn 1.0.109",
 ]
 
 [[package]]
 name = "cosmwasm-schema"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e9e92cdce475a91659d0dc4d17836a484fc534e80e787281aa4adde4cb1798b"
+checksum = "0f00b363610218eea83f24bbab09e1a7c3920b79f068334fdfcc62f6129ef9fc"
 dependencies = [
  "cosmwasm-schema-derive",
  "schemars",
@@ -129,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-schema-derive"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69681bac3dbeb0b00990279e3ed39e3d4406b29f538b16b712f6771322a45048"
+checksum = "ae38f909b2822d32b275c9e2db9728497aa33ffe67dd463bc67c6a3b7092785c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -140,9 +140,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-std"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d39f20967baeb94709123f7bba13a25ae2fa166bc5e7813f734914df3f8f6a1"
+checksum = "a49b85345e811c8e80ec55d0d091e4fcb4f00f97ab058f9be5f614c444a730cb"
 dependencies = [
  "base64",
  "cosmwasm-crypto",
@@ -160,9 +160,9 @@ dependencies = [
 
 [[package]]
 name = "cosmwasm-storage"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88f7944b5204c3a998f73248925a097ace887bdf01c2f70de00d8b92cd69e807"
+checksum = "a3737a3aac48f5ed883b5b73bfb731e77feebd8fc6b43419844ec2971072164d"
 dependencies = [
  "cosmwasm-std",
  "serde",
@@ -323,7 +323,7 @@ dependencies = [
 [[package]]
 name = "cw20-wrapped-2"
 version = "0.1.0"
-source = "git+https://github.com/wormhole-foundation/wormhole#4ed89172cceef430397af2db5b19d011e7829dac"
+source = "git+https://github.com/wormhole-foundation/wormhole#cfeda55cce3094942936aa4126d9c6a652a590c3"
 dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
@@ -443,7 +443,6 @@ dependencies = [
  "cw20-wrapped-2",
  "sei-cosmwasm",
  "serde-json-wasm 0.4.1",
- "terraswap",
  "token-bridge-cosmwasm",
 ]
 
@@ -585,15 +584,6 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
-dependencies = [
- "bytes",
-]
-
-[[package]]
-name = "protobuf"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b55bad9126f378a853655831eb7363b7b01b81d19f8cb1218861086ca4a1a61e"
@@ -699,7 +689,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49b4dd7061ee6ea8bb74f775c54876a8609c191bcd5070446ddd83f0bac3c36c"
 dependencies = [
  "cosmwasm-std",
- "protobuf 3.2.0",
+ "protobuf",
  "schemars",
  "serde",
  "serde_repr",
@@ -873,20 +863,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "terraswap"
-version = "2.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9540f8489ec6e098de380c9fa8fa81fa95e502f87d63705aa6fba56817ad1a7"
-dependencies = [
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw20",
- "protobuf 2.28.0",
- "schemars",
- "serde",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -909,7 +885,7 @@ dependencies = [
 [[package]]
 name = "token-bridge-cosmwasm"
 version = "0.1.0"
-source = "git+https://github.com/wormhole-foundation/wormhole#4ed89172cceef430397af2db5b19d011e7829dac"
+source = "git+https://github.com/wormhole-foundation/wormhole#cfeda55cce3094942936aa4126d9c6a652a590c3"
 dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
@@ -920,7 +896,6 @@ dependencies = [
  "schemars",
  "serde",
  "sha3",
- "terraswap",
  "thiserror",
  "wormhole-cosmwasm",
 ]
@@ -964,7 +939,7 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 [[package]]
 name = "wormhole-cosmwasm"
 version = "0.1.0"
-source = "git+https://github.com/wormhole-foundation/wormhole#4ed89172cceef430397af2db5b19d011e7829dac"
+source = "git+https://github.com/wormhole-foundation/wormhole#cfeda55cce3094942936aa4126d9c6a652a590c3"
 dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
