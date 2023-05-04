@@ -8,13 +8,12 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_token_bridge::msg::{
-    CompleteTransferResponse, ExecuteMsg as TokenBridgeExecuteMsg, QueryMsg as TokenBridgeQueryMsg,
-    TransferInfoResponse,
+    Asset, AssetInfo, CompleteTransferResponse, ExecuteMsg as TokenBridgeExecuteMsg,
+    QueryMsg as TokenBridgeQueryMsg, TransferInfoResponse,
 };
 use sei_cosmwasm::SeiMsg;
 
 use cw20_wrapped_2::msg::ExecuteMsg as Cw20WrappedExecuteMsg;
-use terraswap::asset::{Asset, AssetInfo};
 
 use crate::{
     msg::{BridgingPayload, ExecuteMsg, InstantiateMsg, ReceiveAction},
