@@ -444,6 +444,7 @@ dependencies = [
  "sei-cosmwasm",
  "serde-json-wasm 0.4.1",
  "token-bridge-cosmwasm",
+ "wormhole-cosmwasm",
 ]
 
 [[package]]
