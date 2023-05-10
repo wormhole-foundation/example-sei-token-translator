@@ -11,6 +11,7 @@ use cw_token_bridge::msg::{
     Asset, AssetInfo, CompleteTransferResponse, ExecuteMsg as TokenBridgeExecuteMsg,
     QueryMsg as TokenBridgeQueryMsg, TransferInfoResponse,
 };
+use cw_wormhole::byte_utils::ByteUtils;
 use sei_cosmwasm::SeiMsg;
 
 use cw20_wrapped_2::msg::ExecuteMsg as Cw20WrappedExecuteMsg;
@@ -56,7 +57,7 @@ pub fn execute(
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
     match msg {
         ExecuteMsg::CompleteTransferAndConvert { vaa } => {
-            complete_transfer_and_convert(deps, info, vaa)
+            complete_transfer_and_convert(deps, env, info, vaa)
         }
         ExecuteMsg::ConvertAndTransfer {
             recipient_chain,
@@ -137,6 +138,7 @@ fn handle_complete_transfer_reply(
 /// Calls into the wormhole token bridge to complete the payload3 transfer.
 fn complete_transfer_and_convert(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     vaa: Binary,
 ) -> Result<Response<SeiMsg>, anyhow::Error> {
@@ -173,6 +175,16 @@ fn complete_transfer_and_convert(
             msg: token_bridge_query_msg,
         }))
         .context("could not parse token bridge payload3 vaa")?;
+
+    // DEFENSE IN-DEPTH CHECK FOR PAYLOAD3 VAAs
+    // ensure that the transfer vaa recipient is this contract.
+    // we should never process any VAAs that are not directed to this contract.
+    let target_address = (&transfer_info.recipient.as_slice()).get_address(0);
+    let recipient = deps.api.addr_humanize(&target_address)?;
+    ensure!(
+        recipient == env.contract.address,
+        "vaa recipient must be this contract"
+    );
 
     // save interim state
     CURRENT_TRANSFER
